@@ -209,3 +209,14 @@
 		color:#fff;
 		border-color:#fff;
 	}
+
+/*Estilos pestañas(tabs)*/
+a.nav-tab {
+	margin-bottom: -9px;
+}
+a.nav-tab.nav-tab-active {
+	background: #fff;
+}
+a.nav-tab.nav-tab-active:focus {
+	box-shadow: none;
+}

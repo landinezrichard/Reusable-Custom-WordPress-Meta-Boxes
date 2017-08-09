@@ -416,8 +416,9 @@ class Custom_Add_Meta_Box {
 	var $title;
 	var $fields;
 	var $page;
+	var $tabs_nav;
 	
-    public function __construct( $id, $title, $fields, $page ) {
+    public function __construct( $id, $title, $fields, $page) {
 		$this->id = $id;
 		$this->title = $title;
 		$this->fields = $fields;
@@ -428,8 +429,21 @@ class Custom_Add_Meta_Box {
 		
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ) );
 		add_action( 'admin_head',  array( $this, 'admin_head' ) );
-		add_action( 'add_meta_boxes', array( $this, 'add_box' ) );
-		add_action( 'save_post',  array( $this, 'save_box' ));
+
+    }
+
+    public function set_tabsnav($tabs_nav){
+    	$this->tabs_nav = $tabs_nav;
+    }
+
+    public function create_save_metabox(){
+    	if( isset($this->tabs_nav) ){
+    		add_action( 'add_meta_boxes', array( $this, 'add_box_tabs' ) );
+    		add_action( 'save_post',  array( $this, 'save_box_tabs' ));
+    	}else{
+    		add_action( 'add_meta_boxes', array( $this, 'add_box' ) );
+    		add_action( 'save_post',  array( $this, 'save_box' ));
+    	}
     }
 	
 	/**
@@ -544,6 +558,12 @@ class Custom_Add_Meta_Box {
 							<h2>' . $field['label'] . '</h2>
 						</td>
 					</tr>';
+			}elseif ( $field['type'] == 'title' ){
+				echo '<p class="post-attributes-label-wrapper">
+						<strong >'. $field['label'] .'</strong>
+						<br />
+						<span class="howto">'. $field['desc'] .'</span>
+						</p>';
 			}
 			else {
 				echo '<tr>
@@ -580,7 +600,7 @@ class Custom_Add_Meta_Box {
 		
 		// loop through fields and save the data
 		foreach ( $this->fields as $field ) {
-			if( $field['type'] == 'section' ) {
+			if( $field['type'] == 'section' || $field['type'] == 'title' ) {
 				$sanitizer = null;
 				continue;
 			}
@@ -609,6 +629,137 @@ class Custom_Add_Meta_Box {
 				}
 			}
 		} // end foreach
+	}
+
+
+	/**
+	 * adds the meta box for every post type in $page
+	 * Para las tabs
+	 */
+	function add_box_tabs() {
+		foreach ( $this->page as $page ) {
+			add_meta_box( $this->id, $this->title, array( $this, 'meta_box_callback_tabs' ), $page, 'normal', 'high' );
+		}
+	}
+
+	/**
+	 * outputs the meta box
+	 * Para las tabs
+	 */
+	function meta_box_callback_tabs() {
+		// Use nonce for verification
+		wp_nonce_field( 'custom_meta_box_nonce_action', 'custom_meta_box_nonce_field' );
+		
+		echo '<div class="contenedor_tabs">';
+		$primera_tab = true;
+		echo '<h2 class="nav-tab-wrapper current">';
+		foreach ( $this->tabs_nav as $tab_nav ) {
+			if( $primera_tab ){
+				echo '<a class="nav-tab nav-tab-active" href="#">'. $tab_nav .'</a>';
+				$primera_tab = false;
+			}else{
+				echo '<a class="nav-tab" href="#">'. $tab_nav .'</a>';
+			}
+		}
+		echo '</h2>';
+		$primera_tab = true;
+		foreach ( $this->fields as $tab ) {
+			if( $primera_tab ){
+				echo '<div class="inside">';
+				$primera_tab = false;
+			}else{
+				echo '<div class="inside hidden">';
+			}
+
+			// Begin the field table and loop
+			echo '<table class="form-table meta_box">';
+			foreach ( $tab as $field) {
+				if ( $field['type'] == 'section' ) {
+					echo '<tr>
+							<td colspan="2">
+								<h2>' . $field['label'] . '</h2>
+							</td>
+						</tr>';
+				}elseif ( $field['type'] == 'title' ){
+					echo '<p class="post-attributes-label-wrapper">
+							<strong >'. $field['label'] .'</strong>
+							<br />
+							<span class="howto">'. $field['desc'] .'</span>
+							</p>';
+				}
+				else {
+					echo '<tr>
+							<th style="width:20%"><label for="' . $field['id'] . '">' . $field['label'] . '</label></th>
+							<td>';
+							
+							$meta = get_post_meta( get_the_ID(), $field['id'], true);
+							echo custom_meta_box_field( $field, $meta );
+							
+					echo     '<td>
+						</tr>';
+				}
+			} // end foreach
+			echo '</table>'; // end table
+			echo '</div>'; //cierre div class="inside"
+		}
+
+		echo '</div>'; //cierre div id="contenedor_tabs"
+		
+	}
+
+	/**
+	 * saves the captured data
+	 * Para las tabs
+	 */
+	function save_box_tabs( $post_id ) {
+		$post_type = get_post_type();
+		
+		// verify nonce
+		if ( ! isset( $_POST['custom_meta_box_nonce_field'] ) )
+			return $post_id;
+		if ( ! ( in_array( $post_type, $this->page ) || wp_verify_nonce( $_POST['custom_meta_box_nonce_field'],  'custom_meta_box_nonce_action' ) ) ) 
+			return $post_id;
+		// check autosave
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
+			return $post_id;
+		// check permissions
+		if ( ! current_user_can( 'edit_page', $post_id ) )
+			return $post_id;
+		
+		// loop through fields and save the data
+		foreach ($this->$fields as $tab) {
+					
+			foreach ( $tab as $field ) {
+				if( $field['type'] == 'section' || $field['type'] == 'title' ) {
+					$sanitizer = null;
+					continue;
+				}
+				if( in_array( $field['type'], array( 'tax_select', 'tax_checkboxes' ) ) ) {
+					// save taxonomies
+					if ( isset( $_POST[$field['id']] ) ) {
+						$term = $_POST[$field['id']];
+						wp_set_object_terms( $post_id, $term, $field['id'] );
+					}
+				}
+				else {
+					// save the rest
+					$new = false;
+					$old = get_post_meta( $post_id, $field['id'], true );
+					if ( isset( $_POST[$field['id']] ) )
+						$new = $_POST[$field['id']];
+					if ( isset( $new ) && '' == $new && $old ) {
+						delete_post_meta( $post_id, $field['id'], $old );
+					} elseif ( isset( $new ) && $new != $old ) {
+						$sanitizer = isset( $field['sanitizer'] ) ? $field['sanitizer'] : 'sanitize_text_field';
+						if ( is_array( $new ) )
+							$new = meta_box_array_map_r( 'meta_box_sanitize', $new, $sanitizer );
+						else
+							$new = meta_box_sanitize( $new, $sanitizer );
+						update_post_meta( $post_id, $field['id'], $new );
+					}
+				}
+			} // end foreach
+		}
 	}
 	
 }
