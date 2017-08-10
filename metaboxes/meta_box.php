@@ -727,7 +727,7 @@ class Custom_Add_Meta_Box {
 			return $post_id;
 		
 		// loop through fields and save the data
-		foreach ($this->$fields as $tab) {
+		foreach ($this->fields as $tab) {
 					
 			foreach ( $tab as $field ) {
 				if( $field['type'] == 'section' || $field['type'] == 'title' ) {
